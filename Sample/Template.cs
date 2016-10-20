@@ -32,40 +32,23 @@ public sealed class Program : MyGridProgram
     List<IMyTerminalBlock> hangarSoundBlocks = new List<IMyTerminalBlock>();
     List<IMyTerminalBlock> hangarWarningLightsBack = new List<IMyTerminalBlock>();
 
-    bool working = false;
     string lastCommand = "";
     string afectedObject = "";
 
     void Main(string args)
     {
-        Echo("=Status=");
-        Echo("Working: " + working);
-        Echo("LastCommend: " + lastCommand);
-        Echo("AfectedObject: " + afectedObject);
-
-        depressAirVents = GetAirVents(GridTerminalSystem, airVentDepressPrefix);
-        pressAirVents = GetAirVents(GridTerminalSystem, airVentPressPrefix);
+        depressAirVents = GetTerminalBlocksOfType<IMyAirVent>(GridTerminalSystem, airVentDepressPrefix);
+        pressAirVents = GetTerminalBlocksOfType<IMyAirVent>(GridTerminalSystem, airVentPressPrefix);
         hangarDoor = GetHangarDoor(GridTerminalSystem, hangarDoorGroupPrefix);
-        hangarSoundBlocks = GetSoundBlocks(GridTerminalSystem, soundBlockPrefix);
-        hangarWarningLightsBack = GetLights(GridTerminalSystem, warningLightBackPrefix);
+        hangarSoundBlocks = GetTerminalBlocksOfType<IMySoundBlock>(GridTerminalSystem, soundBlockPrefix);
+        hangarWarningLightsBack = GetTerminalBlocksOfType<IMyInteriorLight>(GridTerminalSystem, warningLightBackPrefix);
 
-        Echo("Depress AirVents: " + depressAirVents.Count.ToString());
-        Echo("Press AirVents: " + pressAirVents.Count.ToString());
-        Echo("Hangar Door Blocks: " + hangarDoor.Count.ToString());
-        Echo("Sound Blocks: " + hangarSoundBlocks.Count.ToString());
-        Echo("Lights: " + hangarWarningLightsBack.Count.ToString());
+        PrintStatus();
 
-        if (!working && args != "")
+        if (args.Contains(hangarDoorGroupPrefix))
         {
-            if (args.Contains(hangarDoorGroupPrefix))
-            {
-                afectedObject = args;
-                if (lastCommand == openCommand)
-                    lastCommand = closeCommand;
-                else
-                    lastCommand = openCommand;
-
-            }
+            afectedObject = args;
+            lastCommand = lastCommand == openCommand ? closeCommand : openCommand;
 
             switch (lastCommand)
             {
@@ -76,7 +59,6 @@ public sealed class Program : MyGridProgram
                     StartClose();
                     break;
                 default:
-                    ProcessTick();
                     break;
             }
         }
@@ -88,8 +70,6 @@ public sealed class Program : MyGridProgram
 
     void StartOpen()
     {
-
-        working = true;
         //      - Turn off press air vents  
         CallTerminalBlockAction(pressAirVents, "OnOff_Off");
         //      - Turn on depress air vents  
@@ -105,8 +85,6 @@ public sealed class Program : MyGridProgram
 
     void StartClose()
     {
-        working = true;
-
         //      - Close gate  
         CallTerminalBlockAction(hangarDoor, "Open_Off");
         //      - Wait gate close  
@@ -117,8 +95,6 @@ public sealed class Program : MyGridProgram
 
     void ProcessTick()
     {
-        if (working)
-        {
             switch (lastCommand)
             {
                 case openCommand:
@@ -126,9 +102,7 @@ public sealed class Program : MyGridProgram
                     {
                         Echo("Room NOT Presurised");
                         CallTerminalBlockAction(hangarDoor, "Open_On");
-                        working = false;
                         afectedObject = "";
-
                     }
                     else
                     {
@@ -140,17 +114,13 @@ public sealed class Program : MyGridProgram
                     if (IsHangarDoorSealed(hangarDoor))
                     {
                         CallTerminalBlockAction(depressAirVents, "Depressurize_Off");
-                        working = false;
                         afectedObject = "";
                         CallTerminalBlockAction(hangarWarningLightsBack, "OnOff_Off");
                     }
-
                     break;
                 default:
                     break;
             }
-
-        }
     }
 
     List<IMyTerminalBlock> GetHangarDoor(IMyGridTerminalSystem localTerminal, string groupPrefix)
@@ -179,53 +149,24 @@ public sealed class Program : MyGridProgram
         return true;
     }
 
-    List<IMyTerminalBlock> GetAirVents(IMyGridTerminalSystem localTerminal, string prefix)
+    List<IMyTerminalBlock> GetTerminalBlocksOfType<T>(IMyGridTerminalSystem localTerminal, string prefix) where T : class, IMyTerminalBlock
     {
-        List<IMyAirVent> allVents = new List<IMyAirVent>();
-        List<IMyTerminalBlock> specificVents = new List<IMyTerminalBlock>();
-        GridTerminalSystem.GetBlocksOfType<IMyAirVent>(allVents);
-        foreach (IMyAirVent vent in allVents)
+        List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
+        List<IMyTerminalBlock> filteredBlocks = new List<IMyTerminalBlock>();
+        localTerminal.GetBlocksOfType<T>(blocks);
+        foreach (T block in blocks)
         {
-            if (vent.CustomName.ToLower().Contains(prefix.ToLower()))
-                specificVents.Add(vent);
-        }
-        return specificVents;
-    }
-
-    List<IMyTerminalBlock> GetSoundBlocks(IMyGridTerminalSystem localTerminal, string prefix)
-    {
-        List<IMySoundBlock> soundBlocks = new List<IMySoundBlock>();
-        List<IMyTerminalBlock> filteredSoundBlocks = new List<IMyTerminalBlock>();
-        GridTerminalSystem.GetBlocksOfType<IMySoundBlock>(soundBlocks);
-        foreach (IMySoundBlock soundBlock in soundBlocks)
-        {
-            if (soundBlock.CustomName.ToLower().Contains(prefix.ToLower()))
-                filteredSoundBlocks.Add(soundBlock);
-        }
-        return filteredSoundBlocks;
-    }
-
-    List<IMyTerminalBlock> GetLights(IMyGridTerminalSystem localTerminal, string prefix)
-    {
-        List<IMyInteriorLight> lights = new List<IMyInteriorLight>();
-        List<IMyTerminalBlock> filteredLights = new List<IMyTerminalBlock>();
-        localTerminal.GetBlocksOfType<IMyInteriorLight>(lights);
-        foreach (IMyInteriorLight light in lights)
-        {
-            if (light.CustomName.ToLower().Contains(prefix.ToLower()))
+            if (block.CustomName.ToLower().Contains(prefix.ToLower()))
             {
-                filteredLights.Add(light);
+                filteredBlocks.Add(block);
             }
         }
-        return filteredLights;
+        return filteredBlocks;
     }
 
     void SoundAlarm()
     {
-        foreach (IMySoundBlock sb in hangarSoundBlocks)
-        {
-            sb.GetActionWithName("PlaySound").Apply(sb);
-        }
+        CallTerminalBlockAction(hangarSoundBlocks, "PlaySound");
     }
     void CallTerminalBlockAction(List<IMyTerminalBlock> blocks, string action)
     {
@@ -245,9 +186,20 @@ public sealed class Program : MyGridProgram
                 Echo("Oxygen Level: " + vent.GetOxygenLevel());
                 return false;
             }
-
         }
         return true;
+    }
+
+    void PrintStatus()
+    {
+        Echo("=Status=");
+        Echo("LastCommend: " + lastCommand);
+        Echo("AfectedObject: " + afectedObject);
+        Echo("Depress AirVents: " + depressAirVents.Count.ToString());
+        Echo("Press AirVents: " + pressAirVents.Count.ToString());
+        Echo("Hangar Door Blocks: " + hangarDoor.Count.ToString());
+        Echo("Sound Blocks: " + hangarSoundBlocks.Count.ToString());
+        Echo("Lights: " + hangarWarningLightsBack.Count.ToString());
     }
 
 }
